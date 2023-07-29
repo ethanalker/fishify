@@ -19,8 +19,6 @@ use rspotify::{
     prelude::{ PlayContextId, PlayableId, },
 };
 
-// TODO: fix this shit it ass (all of it, like the whole file)
-
 fn url_to_uri(url: &str) -> Option<String> {
     let base_url: &str = url.split('?').next()?;
     let mut split_url = base_url.rsplit('/');
@@ -47,29 +45,45 @@ fn duration_clock_format(duration: Duration) -> String {
     }
 }
 
-impl Fishify for AuthCodeSpotify {}
 impl FishifyClient for AuthCodeSpotify {}
 
-#[async_trait]
-pub trait FishifyClient: Fishify {
-    async fn play(&self, q: Option<String>, _type: Option<SearchType>, is_url: bool, queue: bool) -> Result<Vec<String>> {
-        let mut response: Vec<String> = vec![];
+#[derive(Clone, Debug)]
+pub struct Fishify<'a> {
+    spotify: &'a AuthCodeSpotify,
+    pub response: Vec<String>,
+    pub show: bool,
+}
+
+impl<'a> From<&'a AuthCodeSpotify> for Fishify<'a> {
+    fn from(spotify: &'a AuthCodeSpotify) -> Self {
+        return Self {
+            spotify: spotify,
+            response: vec![],
+            show: true,
+        };
+    }
+}
+
+impl<'a> Fishify<'a> {
+    pub async fn play(&mut self, q: Option<String>, _type: Option<SearchType>, is_url: bool, queue: bool) -> Result<()> {
         if q.is_none() {
-            self.resume_playback(None, None).await?;
-            response.push("Resumed playback".to_string());
-            return Ok(response)
+            self.spotify.resume_playback(None, None).await?;
+            self.response.push("Resumed playback".to_string());
+            self.show = false;
+            return Ok(());
         } 
         let query = q.unwrap();
 
         let search_type = _type.unwrap_or(SearchType::Track);
 
-        let uri = url_to_uri(&query);
+        let uri: String;
         let id = if is_url {
-            self.play_uri(uri.as_ref().ok_or(anyhow!("Invalid url"))?, queue).await?
+            uri = url_to_uri(&query).ok_or(anyhow!("Invalid url"))?;
+            self.spotify.play_uri(&uri, queue).await?
         } else {
-            self.play_query(&query, search_type, queue).await?
+            self.spotify.play_query(&query, search_type, queue).await?
         };
-        let playing = self.get_content(id).await?;
+        let playing = self.spotify.get_content(id).await?;
 
         let name = playing.name();
         let artists = playing.artists();
@@ -81,26 +95,24 @@ pub trait FishifyClient: Fishify {
         };
         
         if let Some(art) = artist {
-            response.push(format!("{prefix} {name} by {0}", art.name));
+            self.response.push(format!("{prefix} {name} by {0}", art.name));
         } else {
-            response.push(format!("{prefix} {name}"));
+            self.response.push(format!("{prefix} {name}"));
         };
 
-        Ok(response)
+        Ok(())
     }
 
-    async fn queue_list(&self) -> Result<Vec<String>> {
-        let mut response: Vec<String> = vec![];
-
-        let current_queue = self.current_user_queue().await?;
+    pub async fn queue_list(&mut self) -> Result<()> {
+        let current_queue = self.spotify.current_user_queue().await?;
         if let Some(item) = &current_queue.currently_playing {
             let name = item.name();
             let artists = item.artists();
             let artist = artists.get(0);
             if let Some(art) = artist {
-                response.push(format!("Currently playing {name} by {0}", art.name));
+                self.response.push(format!("Currently playing {name} by {0}", art.name));
             } else {
-                response.push(format!("Currently playing {name}"));
+                self.response.push(format!("Currently playing {name}"));
             }
         }
 
@@ -110,35 +122,32 @@ pub trait FishifyClient: Fishify {
             let artist = artists.get(0);
             let index = i+1;
             if let Some(art) = artist {
-                response.push(format!("{index:>3}. {name} \u{2014} {0}", art.name));
+                self.response.push(format!("{index:>3}. {name} \u{2014} {0}", art.name));
             } else {
-                response.push(format!("{index:>3}. {name}"));
+                self.response.push(format!("{index:>3}. {name}"));
             }
         }
-
-        Ok(response)
+        Ok(())
     }
 
-    async fn pause(&self) -> Result<Vec<String>> {
-        let mut response: Vec<String> = vec![];
-        self.pause_playback(None).await?;
-        response.push("Paused playback".to_string());
-        Ok(response)
+    pub async fn pause(&mut self) -> Result<()> {
+        self.spotify.pause_playback(None).await?;
+        self.response.push("Paused playback".to_string());
+        self.show = false;
+        Ok(())
     }
 
-    async fn skip(&self, count: u8) -> Result<Vec<String>> {
-        let mut response: Vec<String> = vec![];
+    pub async fn skip(&mut self, count: u8) -> Result<()> {
         for _ in 0..count {
-            self.next_track(None).await?;
+            self.spotify.next_track(None).await?;
         }
-        response.push(format!("Skipped {count} tracks"));
-        Ok(response)
+        self.response.push(format!("Skipped {count} tracks"));
+        self.show = false;
+        Ok(())
     }
 
-    async fn status(&self) -> Result<Vec<String>> {
-        let mut response: Vec<String> = vec![];
-
-        let playback = self.current_playback(None, None::<Vec<&AdditionalType>>).await?.ok_or(anyhow!("No current playback"))?;
+    pub async fn status(&mut self) -> Result<()> {
+        let playback = self.spotify.current_playback(None, None::<Vec<&AdditionalType>>).await?.ok_or(anyhow!("No current playback"))?;
 
         // This will create a message with the format:
         //   {is_playing}
@@ -150,16 +159,16 @@ pub trait FishifyClient: Fishify {
         //   Repeat: {repeat}
 
         if playback.is_playing {
-            response.push("Playing".to_string());
+            self.response.push("Playing".to_string());
         } else {
-            response.push("Paused".to_string());
+            self.response.push("Paused".to_string());
         }
 
         if let Some(context) = playback.context {
             let _type = context._type;
-            let name = self.get_content(ContentId::from_uri(&context.uri).unwrap()).await?.name();
+            let name = self.spotify.get_content(ContentId::from_uri(&context.uri).unwrap()).await?.name();
             
-            response.push(format!("{_type:?}: {name}"));
+            self.response.push(format!("{_type:?}: {name}"));
         }
 
         if let Some(item) = playback.item {
@@ -167,7 +176,7 @@ pub trait FishifyClient: Fishify {
             let artists = item.artists();
             let artist = artists.get(0);
 
-            response.push(
+            self.response.push(
                 if let Some(art) = artist {
                     format!("{name} \u{2014} {0}", art.name)
                 } else {
@@ -177,12 +186,12 @@ pub trait FishifyClient: Fishify {
 
             if let Some(progress) = playback.progress {
                 let duration = item.duration().unwrap();
-                response.push(format!("{} / {}", duration_clock_format(progress), duration_clock_format(duration)));
+                self.response.push(format!("{} / {}", duration_clock_format(progress), duration_clock_format(duration)));
             }
         }
 
         if let Some(volume) = playback.device.volume_percent {
-            response.push(format!("Volume: {volume}%"));
+            self.response.push(format!("Volume: {volume}%"));
         }
 
         let shuffle_state = if playback.shuffle_state {
@@ -190,44 +199,43 @@ pub trait FishifyClient: Fishify {
         } else {
             "Off"
         };
-        response.push(format!("Shuffle: {shuffle_state}"));
+        self.response.push(format!("Shuffle: {shuffle_state}"));
 
-        response.push(format!("Repeat: {:?}", playback.repeat_state));
+        self.response.push(format!("Repeat: {:?}", playback.repeat_state));
 
-        Ok(response)
+        Ok(())
     }
 
-    async fn device_list(&self) -> Result<Vec<String>> {
-        let devices = self.device().await?;
-        Ok(devices.into_iter().map(|dev| {
+    pub async fn device_list(&mut self) -> Result<()> {
+        let devices = self.spotify.device().await?;
+
+        for dev in devices {
             let name = dev.name;
             let _type = dev._type;
             let id = match dev.id {
                 Some(id) => id,
                 None => "None".to_string(),
             };
+            self.response.push(format!("{_type:?} {name} \u{2014} {id}"));
+        }
 
-            format!("{_type:?} {name} \u{2014} {id}")
-        }).collect())
+        Ok(())
     }
 
-    async fn device_connect(&self, name: Option<String>) -> Result<Vec<String>> {
-        let mut response: Vec<String> = vec![];
-        
-        let device = self.device_get(name).await?;
+    pub async fn device_connect(&mut self, name: Option<String>) -> Result<()> {
+        let device = self.spotify.device_get(name).await?;
         let device_id = device.id.as_ref().ok_or(anyhow!("Missing device id"))?;
         let device_name = device.name;
 
-        self.transfer_playback(&device_id, None).await?;
-        response.push(format!("Connected to {device_name}"));
+        self.spotify.transfer_playback(&device_id, None).await?;
+        self.response.push(format!("Connected to {device_name}"));
+        self.show = false;
 
-        Ok(response)
+        Ok(())
     }
 
-    async fn device_status(&self) -> Result<Vec<String>> {
-        let mut response: Vec<String> = vec![];
-        
-        let device = self.active_device().await?;
+    pub async fn device_status(&mut self) -> Result<()> {
+        let device = self.spotify.active_device().await?;
 
         match device {
             Some(dev) => {
@@ -238,35 +246,41 @@ pub trait FishifyClient: Fishify {
                 };
                 let is_active = dev.is_active.to_string();
                 let _type = dev._type;
-                response.push(format!("Device: {name}"));
-                response.push(format!("Id: {id}"));
-                response.push(format!("Active: {is_active}"));
-                response.push(format!("Type: {_type:?}"));
+                self.response.push(format!("Device: {name}"));
+                self.response.push(format!("Id: {id}"));
+                self.response.push(format!("Active: {is_active}"));
+                self.response.push(format!("Type: {_type:?}"));
             },
-            None => response.push(format!("No playback")),
+            None => self.response.push(format!("No playback")),
         }
 
-        Ok(response)
+        Ok(())
     }
 
-    async fn set_volume(&self, level: u8) -> Result<Vec<String>> {
-        self.volume(level, None).await?;
-        Ok(vec![format!("Success")])
+    pub async fn set_volume(&mut self, level: u8) -> Result<()> {
+        self.spotify.volume(level, None).await?;
+        self.response.push(format!("Set volume to {level}"));
+        self.show = false;
+        Ok(())
     }
 
-    async fn set_shuffle(&self, state: bool) -> Result<Vec<String>> {
-        self.shuffle(state, None).await?;
-        Ok(vec![format!("Success")])
+    pub async fn set_shuffle(&mut self, state: bool) -> Result<()> {
+        self.spotify.shuffle(state, None).await?;
+        self.response.push(format!("Set shuffle to {state}"));
+        self.show = false;
+        Ok(())
     }
 
-    async fn set_repeat(&self, state: RepeatState) -> Result<Vec<String>> {
-        self.repeat(state, None).await?;
-        Ok(vec![format!("Success")])
+    pub async fn set_repeat(&mut self, state: RepeatState) -> Result<()> {
+        self.spotify.repeat(state, None).await?;
+        self.response.push(format!("Set repeat to {state:?}"));
+        self.show = false;
+        Ok(())
     }
 }
 
 #[async_trait]
-pub trait Fishify: OAuthClient + BaseClient {
+trait FishifyClient: OAuthClient + BaseClient {
     async fn device_get(&self, name: Option<String>) -> Result<Device> {
         let devices: Vec<Device> = self.device().await?;
 
