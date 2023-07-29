@@ -4,14 +4,11 @@ use cli::{ Cli, Commands, QueueCommands, DeviceCommands, SetCommands, };
 
 use fishify_lib::{
     spotify_init,
-    spotify::{ FishifyClient, },
+    spotify::{ Fishify, },
 };
 
 use std::io;
 use anyhow::{ anyhow, Result, };
-use rspotify::{
-    scopes,
-};
 use clap::{ Parser, CommandFactory, Command, };
 use clap_complete::{ generate, Shell, };
 
@@ -23,11 +20,13 @@ fn gen_completions(cli: &mut Command, shell: Option<Shell>) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let spotify = spotify_init(scopes!("user-modify-playback-state", "user-read-playback-state")).await?;
+    let spotify_auth = spotify_init().await?;
 
     let cli = Cli::parse();
 
-    let response = match cli.command {
+    let mut spotify = Fishify::from(&spotify_auth);
+
+    match cli.command {
         Commands::Play{query, url, _type} => spotify.play(query, _type, url, false).await?,
         Commands::Queue{query, url, _type, command} => {
             match command {
@@ -52,11 +51,12 @@ async fn main() -> Result<()> {
                 SetCommands::Repeat{state} => spotify.set_repeat(state).await?,
             }
         }
-        Commands::Completions{shell} => { gen_completions(&mut Cli::command(), shell)?; vec![] },
+        Commands::Completions{shell} => gen_completions(&mut Cli::command(), shell)?,
     };
 
-    let response_str = response.join("\n");
-    println!("{response_str}");
+    if spotify.show {
+        println!("{}", spotify.response.join("\n"));
+    }
 
     Ok(())
 }
