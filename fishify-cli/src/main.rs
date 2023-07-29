@@ -7,11 +7,19 @@ use fishify_lib::{
     spotify::{ FishifyClient, },
 };
 
-use anyhow::Result;
+use std::io;
+use anyhow::{ anyhow, Result, };
 use rspotify::{
     scopes,
 };
-use clap::Parser;
+use clap::{ Parser, CommandFactory, Command, };
+use clap_complete::{ generate, Shell, };
+
+fn gen_completions(cli: &mut Command, shell: Option<Shell>) -> Result<()> {
+    let sh = shell.unwrap_or(Shell::from_env().ok_or(anyhow!("Could not determine shell"))?);
+    generate(sh, cli, "fishify", &mut io::stdout());
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -39,11 +47,12 @@ async fn main() -> Result<()> {
         }
         Commands::Set{command} => {
             match command {
-                SetCommands::Volume{level} => spotify.set_volume(level).await?,
+                SetCommands::Volume{level} => spotify.set_volume(level as u8).await?,
                 SetCommands::Shuffle{state} => spotify.set_shuffle(state).await?,
                 SetCommands::Repeat{state} => spotify.set_repeat(state).await?,
             }
         }
+        Commands::Completions{shell} => { gen_completions(&mut Cli::command(), shell)?; vec![] },
     };
 
     let response_str = response.join("\n");

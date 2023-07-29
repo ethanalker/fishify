@@ -1,21 +1,13 @@
-use clap::{ Subcommand, Parser, };
+use clap::{ 
+    builder::{ BoolishValueParser, },
+    Subcommand, Parser, ArgAction,
+};
+use clap_complete::{ shells::Shell, };
 
 use rspotify::model::enums::{
     misc::RepeatState,
     types::SearchType,
 };
-
-fn volume_parser(s: &str) -> Result<u8, String> {
-    if let Ok(val) = s.parse::<u8>() {
-        if val > 100 {
-            Err(format!("cannot exceed 100"))
-        } else {
-            Ok(val)
-        }
-    } else {
-        Err(format!("must be a positive number below 100"))
-    }
-}
 
 fn type_parser(s: &str) -> Result<SearchType, String> {
     match &*s.to_ascii_lowercase() {
@@ -29,20 +21,23 @@ fn type_parser(s: &str) -> Result<SearchType, String> {
     }
 }
 
-fn shuffle_parser(s: &str) -> Result<bool, String> {
-    match &*s.to_ascii_lowercase() {
-        "true" | "on" => Ok(true),
-        "false" | "off" => Ok(false),
-        _ => Err(format!("must be 'true' or 'false'"))
-    }
-}
-
 fn repeat_parser(s: &str) -> Result<RepeatState, String> {
     match &*s.to_ascii_lowercase() {
         "true" | "on" | "context" => Ok(RepeatState::Context),
         "track" => Ok(RepeatState::Track),
         "false" | "off" => Ok(RepeatState::Off),
         _ => Err(format!("must be 'on', 'context', 'track', or 'off'"))
+    }
+}
+
+fn shell_parser(s: &str) -> Result<Shell, String> {
+    match &*s.to_ascii_lowercase() {
+        "bash" => Ok(Shell::Bash),
+        "elvish" => Ok(Shell::Elvish),
+        "fish" => Ok(Shell::Fish),
+        "zsh" => Ok(Shell::Zsh),
+        "powershell" | "power-shell" => Ok(Shell::PowerShell),
+        _ => Err(format!("{s} not supported, must be 'bash', 'zsh', 'fish', 'elvish', or 'powershell'"))
     }
 }
 
@@ -93,15 +88,23 @@ pub enum Commands {
         count: u8,  
     },
     #[command(arg_required_else_help = true)]
+    /// Device commands
     Device {
         #[command(subcommand)]
         command: DeviceCommands,
     },
+    /// Set Spotify settings
     #[command(arg_required_else_help = true)]
     Set {
         #[command(subcommand)]
         command: SetCommands,
     },
+    /// Generate shell completions
+    Completions {
+        /// Target shell. Shell will be determined from the environment if unspecified.
+        #[arg(short, long, value_parser = shell_parser)]
+        shell: Option<Shell>,
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -115,15 +118,14 @@ pub enum SetCommands {
     #[command(arg_required_else_help = true)]
     /// Set volume
     Volume {
-        #[arg(value_parser = volume_parser)]
-        /// 0-100
-        level: u8,
+        #[arg(value_parser = 1..=100)]
+        /// 1-100
+        level: i64,
     },
     #[command(arg_required_else_help = true)]
     /// Enable/disable shuffle
     Shuffle {
-        #[arg(value_parser = shuffle_parser)]
-        /// Boolean
+        #[arg(action = ArgAction::Set, required = true, value_parser = BoolishValueParser::new())]
         state: bool,
     },
     #[command(arg_required_else_help = true)]
