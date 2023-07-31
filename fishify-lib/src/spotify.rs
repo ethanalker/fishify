@@ -4,7 +4,7 @@ use model::{ ContentInfo, ContentType, ContentId, };
 
 use time::Duration;
 
-use anyhow::{anyhow, /* bail, */ Result};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use rspotify::{
     AuthCodeSpotify,
@@ -251,7 +251,7 @@ impl<'a> Fishify<'a> {
                 self.response.push(format!("Active: {is_active}"));
                 self.response.push(format!("Type: {_type:?}"));
             },
-            None => self.response.push(format!("No playback")),
+            None => return Err(anyhow!("No active device")),
         }
 
         Ok(())
