@@ -52,7 +52,11 @@ async fn main() -> Result<()> {
 
     let options = poise::FrameworkOptions {
         // commands go here
-        commands: vec![commands::play(), commands::register()],
+        commands: vec![
+            commands::play(), 
+            commands::search(), 
+            commands::register(),
+        ],
         on_error: |error| Box::pin(on_error(error)),
         pre_command: |ctx| {
             Box::pin(async move {

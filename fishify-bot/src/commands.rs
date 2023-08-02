@@ -72,3 +72,20 @@ pub async fn play(
 
     Ok(())
 }
+
+/// Search for music
+#[command(slash_command)]
+pub async fn search(
+    ctx: Context<'_>,
+    #[description = "Search query"]
+    query: String,
+    #[description = "Search type"]
+    #[rename = "type"]
+    _type: Option<SearchTypeChoice>,
+) -> Result<()> {
+    let mut fishify = Fishify::from(&ctx.data().spotify);
+    fishify.search(query, _type.map(|x| x.into())).await?;
+    ctx.say(format_response(&fishify)).await?;
+
+    Ok(())
+}
