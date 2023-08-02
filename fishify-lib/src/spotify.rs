@@ -196,8 +196,8 @@ impl<'a> Fishify<'a> {
         Ok(())
     }
 
-    pub async fn search(&mut self, q: String, _type: Option<SearchType>) -> Result<()> {
-        let result = self.spotify.search(&q, _type.unwrap_or(SearchType::Track), None, None, Some(10), None).await?;
+    pub async fn search(&mut self, q: String, _type: Option<SearchType>, limit: Option<u32>) -> Result<()> {
+        let result = self.spotify.search(&q, _type.unwrap_or(SearchType::Track), None, None, Some(limit.unwrap_or(10)), None).await?;
         let results = ContentType::from_search(result);
 
         for item in results {

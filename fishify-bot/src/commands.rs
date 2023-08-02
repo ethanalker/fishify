@@ -82,9 +82,11 @@ pub async fn search(
     #[description = "Search type"]
     #[rename = "type"]
     _type: Option<SearchTypeChoice>,
+    #[description = "Limit number of results"]
+    limit: Option<u32>,
 ) -> Result<()> {
     let mut fishify = Fishify::from(&ctx.data().spotify);
-    fishify.search(query, _type.map(|x| x.into())).await?;
+    fishify.search(query, _type.map(|x| x.into()), limit).await?;
     ctx.say(format_response(&fishify)).await?;
 
     Ok(())

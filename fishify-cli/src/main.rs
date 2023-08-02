@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
                     None => spotify.play(query, _type, url, true).await,
                 }
             },
-            Commands::Search{query, _type} => spotify.search(query, _type).await,
+            Commands::Search{query, _type, limit} => spotify.search(query, _type, limit).await,
             Commands::Pause => spotify.pause().await,
             Commands::Skip{count} => spotify.skip(count).await,
             Commands::Status => spotify.status().await,

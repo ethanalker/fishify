@@ -85,6 +85,9 @@ pub enum Commands {
         /// Type of music to search for, can be 'track', 'album', 'playlist', 'artist', 'episode', or 'show'
         #[arg(short, long, value_parser = type_parser)]
         _type: Option<SearchType>,
+        /// Limit number of search results, defaults to 10
+        #[arg(short, long)]
+        limit: Option<u32>,
     },
     /// Pause music
     Pause,
