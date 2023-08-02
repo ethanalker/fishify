@@ -10,3 +10,5 @@ fishify-lib = { path = "../fishify-lib" }
 tokio = { version = "1.28.0", features = ["rt-multi-thread", "macros"] }
 rspotify = { version = "0.11.7", features = ["cli"] }
 anyhow = "1.0.71"
+poise = "0.5.5"
+env_logger = "0.10.0"
