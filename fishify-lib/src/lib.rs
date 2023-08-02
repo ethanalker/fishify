@@ -1,5 +1,6 @@
 pub mod config;
 pub mod spotify;
+pub mod model;
 
 use config::ClientConfig;
 

@@ -1,6 +1,4 @@
-mod model;
-
-use model::{ ContentInfo, ContentType, ContentId, };
+use crate::model::{ ContentInfo, ContentType, ContentId, };
 
 use time::Duration;
 
