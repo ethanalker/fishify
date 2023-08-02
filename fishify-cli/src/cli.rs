@@ -51,7 +51,7 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Play music. Unpause if no arguments are supplied
+    /// Play music. Unpause if query is empty
     Play {
         /// Search query for music, or url if --url is supplied
         query: Option<String>,
@@ -63,7 +63,7 @@ pub enum Commands {
         _type: Option<SearchType>,
     },
     #[command(arg_required_else_help = true, args_conflicts_with_subcommands = true)]
-    /// Queue music
+    /// Add music to spotify queue
     Queue {
         /// Search query for music, or url if --url is supplied
         query: Option<String>,
@@ -76,6 +76,15 @@ pub enum Commands {
 
         #[command(subcommand)]
         command: Option<QueueCommands>,
+    },
+    #[command(arg_required_else_help = true)]
+    /// Search for music
+    Search {
+        /// Search query
+        query: String,
+        /// Type of music to search for, can be 'track', 'album', 'playlist', 'artist', 'episode', or 'show'
+        #[arg(short, long, value_parser = type_parser)]
+        _type: Option<SearchType>,
     },
     /// Pause music
     Pause,
