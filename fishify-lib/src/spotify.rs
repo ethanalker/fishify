@@ -1,4 +1,4 @@
-use crate::model::{ ContentInfo, ContentType, ContentId, };
+use crate::model::{ ContentInfo, ContentType, ContentId, FromSearch, };
 
 use time::Duration;
 
@@ -84,16 +84,14 @@ impl<'a> Fishify<'a> {
         let playing = self.spotify.get_content(id).await?;
 
         let name = playing.name();
-        let artists = playing.artists();
-        let artist = artists.get(0);
         let prefix: String = if queue {
             "Queued".to_string()
         } else {
             "Now playing".to_string()
         };
         
-        if let Some(art) = artist {
-            self.response.push(format!("{prefix} {name} by {0}", art.name));
+        if let Some(artist) = playing.artist() {
+            self.response.push(format!("{prefix} {name} by {0}", artist.name));
         } else {
             self.response.push(format!("{prefix} {name}"));
         };
@@ -105,10 +103,8 @@ impl<'a> Fishify<'a> {
         let current_queue = self.spotify.current_user_queue().await?;
         if let Some(item) = &current_queue.currently_playing {
             let name = item.name();
-            let artists = item.artists();
-            let artist = artists.get(0);
-            if let Some(art) = artist {
-                self.response.push(format!("Currently playing {name} by {0}", art.name));
+            if let Some(artist) = item.artist() {
+                self.response.push(format!("Currently playing {name} by {0}", artist.name));
             } else {
                 self.response.push(format!("Currently playing {name}"));
             }
@@ -116,11 +112,9 @@ impl<'a> Fishify<'a> {
 
         for (i, item) in current_queue.queue.iter().enumerate() {
             let name = item.name();
-            let artists = item.artists();
-            let artist = artists.get(0);
             let index = i+1;
-            if let Some(art) = artist {
-                self.response.push(format!("{index:>3}. {name} \u{2014} {0}", art.name));
+            if let Some(artist) = item.artist() {
+                self.response.push(format!("{index:>3}. {name} \u{2014} {0}", artist.name));
             } else {
                 self.response.push(format!("{index:>3}. {name}"));
             }
@@ -171,12 +165,10 @@ impl<'a> Fishify<'a> {
 
         if let Some(item) = playback.item {
             let name = item.name();
-            let artists = item.artists();
-            let artist = artists.get(0);
 
             self.response.push(
-                if let Some(art) = artist {
-                    format!("{name} \u{2014} {0}", art.name)
+                if let Some(artist) = item.artist() {
+                    format!("{name} \u{2014} {0}", artist.name)
                 } else {
                     format!("{name}")
                 }
@@ -200,6 +192,21 @@ impl<'a> Fishify<'a> {
         self.response.push(format!("Shuffle: {shuffle_state}"));
 
         self.response.push(format!("Repeat: {:?}", playback.repeat_state));
+
+        Ok(())
+    }
+
+    pub async fn search(&mut self, q: String, _type: Option<SearchType>) -> Result<()> {
+        let result = self.spotify.search(&q, _type.unwrap_or(SearchType::Track), None, None, Some(10), None).await?;
+        let results = ContentType::from_search(result);
+
+        for item in results {
+            if let Some(artist) = item.artist() {
+                self.response.push(format!("{} \u{2014} {}", item.name(), artist.name))
+            } else {
+                self.response.push(format!("{}", item.name()))
+            }
+        }
 
         Ok(())
     }
@@ -301,7 +308,7 @@ trait FishifyClient: OAuthClient + BaseClient {
 
     async fn play_query(&self, query: &str, _type: SearchType, queue: bool) -> Result<ContentId> {
         let result = self.search(query, _type, None, None, Some(1), None).await?;
-        let id = ContentId::from_search(result).swap_remove(0);
+        let id = ContentId::from_search(result).next().ok_or(anyhow!("No search result"))?;
         self.play_id(id.clone(), queue).await?;
         Ok(id)
     }

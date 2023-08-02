@@ -78,23 +78,37 @@ impl<'a> ContentId<'a> {
             _ => Err(IdError::InvalidType.into()),
         }
     }
+}
 
-    // id is only ever missing for local content
-    pub fn from_search(result: SearchResult) -> Vec<Self> {
+pub trait FromSearch {
+    fn from_search(result: SearchResult) -> Box<dyn Iterator<Item = Self>>;
+}
+
+impl FromSearch for ContentType {
+    fn from_search(result: SearchResult) -> Box<dyn Iterator<Item = Self>> {
         match result {
-            SearchResult::Tracks(page) => page.items.into_iter().map(|x| Self::from(x.id.expect("missing id"))).collect(),
-            SearchResult::Albums(page) => page.items.into_iter().map(|x| Self::from(x.id.expect("missing id"))).collect(),
-            SearchResult::Playlists(page) => page.items.into_iter().map(|x| Self::from(x.id)).collect(),
-            SearchResult::Artists(page) => page.items.into_iter().map(|x| Self::from(x.id)).collect(),
-            SearchResult::Shows(page) => page.items.into_iter().map(|x| Self::from(x.id)).collect(),
-            SearchResult::Episodes(page) => page.items.into_iter().map(|x| Self::from(x.id)).collect(),
+            SearchResult::Tracks(page) => Box::new(page.items.into_iter().map(|x| Self::from(x))),
+            SearchResult::Albums(page) => Box::new(page.items.into_iter().map(|x| Self::from(x))),
+            SearchResult::Playlists(page) => Box::new(page.items.into_iter().map(|x| Self::from(x))),
+            SearchResult::Artists(page) => Box::new(page.items.into_iter().map(|x| Self::from(x))),
+            SearchResult::Shows(page) => Box::new(page.items.into_iter().map(|x| Self::from(x))),
+            SearchResult::Episodes(page) => Box::new(page.items.into_iter().map(|x| Self::from(x))),
         }
+    }
+}
+
+impl<'a> FromSearch for ContentId<'a> {
+    fn from_search(result: SearchResult) -> Box<dyn Iterator<Item = Self>> {
+        Box::new(ContentType::from_search(result).map(|x| Self::from(x)))
     }
 }
 
 pub trait ContentInfo {
     fn name(&self) -> String;
     fn artists(&self) -> Vec<SimplifiedArtist>;
+    fn artist(&self) -> Option<SimplifiedArtist> {
+        self.artists().get(0).cloned()
+    }
     fn duration(&self) -> Option<Duration>;
 }
 
@@ -154,6 +168,7 @@ impl ContentInfo for ContentType {
             Self::FullEpisode(item) => Some(item.duration.clone()),
         }
     }
+
 }
 
 impl ContentInfo for PlayableItem {
@@ -233,6 +248,25 @@ impl<'a> From<PlayContextId<'a>> for ContentId<'a> {
             PlayContextId::Album(id) => Self::Album(id),
             PlayContextId::Playlist(id) => Self::Playlist(id),
             PlayContextId::Show(id) => Self::Show(id),
+        }
+    }
+}
+
+impl From<ContentType> for ContentId<'_> {
+    fn from(item: ContentType) -> Self {
+        match item {
+            ContentType::SimplifiedTrack(item) => ContentId::from(item.id.clone().expect("missing id")),
+            ContentType::SimplifiedAlbum(item) => ContentId::from(item.id.clone().expect("missing id")),
+            ContentType::SimplifiedPlaylist(item) => ContentId::from(item.id.clone()),
+            ContentType::SimplifiedArtist(item) => ContentId::from(item.id.clone().expect("missing id")),
+            ContentType::SimplifiedShow(item) => ContentId::from(item.id.clone()),
+            ContentType::SimplifiedEpisode(item) => ContentId::from(item.id.clone()),
+            ContentType::FullTrack(item) => ContentId::from(item.id.clone().expect("missing id")),
+            ContentType::FullAlbum(item) => ContentId::from(item.id.clone()),
+            ContentType::FullPlaylist(item) => ContentId::from(item.id.clone()),
+            ContentType::FullArtist(item) => ContentId::from(item.id.clone()),
+            ContentType::FullShow(item) => ContentId::from(item.id.clone()),
+            ContentType::FullEpisode(item) => ContentId::from(item.id.clone()),
         }
     }
 }
