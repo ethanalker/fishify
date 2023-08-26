@@ -3,11 +3,10 @@ mod commands;
 use std::env::var;
 use poise::serenity_prelude as serenity;
 use anyhow::{ Result, Error, };
-use fishify_lib::{
-    spotify_init,
-};
 use rspotify::{ 
+    Credentials, OAuth, Config, scopes,
     AuthCodeSpotify, ClientError, 
+    clients::{ BaseClient, OAuthClient, },
     http::HttpError,
 };
 
@@ -48,14 +47,44 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
 async fn main() -> Result<()> {
     env_logger::init();
 
-    let spotify_auth = spotify_init().await?;
+    // spotify
+    let creds = Credentials::from_env().expect("Missing `RSPOTIFY_CLIENT_ID` or `RSPOTIFY_CLIENT_SECRET` env var.");
+    let oauth = OAuth::from_env(scopes!(
+        "user-modify-playback-state", 
+        "user-read-playback-state"
+    )).expect("Missing `RSPOTIFY_REDIRECT_URI` env var.");
+    let config = Config {
+        token_refreshing: true,
+        token_cached: true,
+        cache_path: var("CACHE_PATH").expect("Missing `CACHE_PATH` env var.").into(),
+        ..Default::default()
+    };
+    let spotify_auth = AuthCodeSpotify::with_config(creds, oauth, config);
 
+    spotify_auth.refresh_token().await?;
+    if spotify_auth.get_token().lock().await.unwrap().is_none() {
+        let url = spotify_auth.get_authorize_url(false).unwrap();
+        spotify_auth.prompt_for_token(&url).await.unwrap();
+    }
+
+    // discord
     let options = poise::FrameworkOptions {
         // commands go here
         commands: vec![
-            commands::play(), 
-            commands::search(), 
             commands::register(),
+            commands::play(),
+            commands::queue(),
+            commands::search(),
+            commands::queue_list(),
+            commands::pause(),
+            commands::skip(),
+            commands::status(),
+            commands::device_list(),
+            commands::device_connect(),
+            commands::device_status(),
+            commands::set_volume(),
+            commands::set_shuffle(),
+            commands::set_repeat(),
         ],
         on_error: |error| Box::pin(on_error(error)),
         pre_command: |ctx| {
